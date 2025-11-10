@@ -44,6 +44,7 @@ class StatusUpdate(NamedTuple):
 
 class SubagentEvent(NamedTuple):
     task_tool_call_id: str
+    subagent_name: str | None
     event: "Event"
 
 
@@ -140,6 +141,7 @@ def serialize_event(event: Event) -> dict[str, Any]:
                 "type": "subagent_event",
                 "payload": {
                     "task_tool_call_id": event.task_tool_call_id,
+                    "subagent_name": event.subagent_name,
                     "event": serialize_event(event.event),
                 },
             }

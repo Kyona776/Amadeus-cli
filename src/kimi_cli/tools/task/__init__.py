@@ -106,7 +106,7 @@ class Task(CallableTool2[Params]):
             )
         agent = self._subagents[params.subagent_name]
         try:
-            result = await self._run_subagent(agent, params.prompt)
+            result = await self._run_subagent(agent, params.prompt, params.subagent_name)
             return result
         except Exception as e:
             return ToolError(
@@ -114,7 +114,12 @@ class Task(CallableTool2[Params]):
                 brief="Failed to run subagent",
             )
 
-    async def _run_subagent(self, agent: Agent, prompt: str) -> ToolReturnType:
+    async def _run_subagent(
+        self,
+        agent: Agent,
+        prompt: str,
+        subagent_name: str,
+    ) -> ToolReturnType:
         """Run subagent with optional continuation for task summary."""
         super_wire = get_wire_or_none()
         assert super_wire is not None
@@ -129,6 +134,7 @@ class Task(CallableTool2[Params]):
 
             event = SubagentEvent(
                 task_tool_call_id=current_tool_call_id,
+                subagent_name=subagent_name,
                 event=msg,
             )
             super_wire.soul_side.send(event)
