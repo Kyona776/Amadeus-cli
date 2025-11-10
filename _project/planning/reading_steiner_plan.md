@@ -91,6 +91,55 @@
 - エージェントは対象世界線の要約・差分・影響度メトリクスを収集し、「レビュー依頼」メッセージとしてユーザーへ提示。  
 - デフォルトでユーザー承認（Approval API）を待つ。承認時のみマージ／更新を実行。  
 - Review Agent の結果は PageIndex ストアにも記録し、後続世界線から参照可能にする。
+
+### 5.8 世界線データモデル（案）
+- 世界線をノード、分岐をエッジとする有向非巡回グラフ (DAG) で管理し、各ノードにチェックポイント・記憶・メトリクスを紐付ける。  
+- ノード属性例:  
+  - `worldline_id` (UUID) / `parent_id` / `root_checkpoint_id`  
+  - `checkpoint_ref`: `Context` 内のスナップショット参照  
+  - `summary`: 1行あらすじ（短文化）  
+  - `highlight`: ハイライト本文（PageIndex ノードIDリスト）  
+  - `metrics`: `{ temporal_consistency, divergence, entropy, review_state }` 等  
+  - `memory_links`: 世界線メモリバンク内の PageIndex ページ参照  
+  - `artifacts`: サブエージェント成果物・レビュー記録へのポインタ  
+- エッジ属性例: `{ reason, created_at, originating_tool, fork_checkpoint_id }`
+
+```
+WorldlineGraph
+├── WorldlineNode (worldline_id=W0, parent_id=None)
+│   ├── checkpoint_ref -> ctx#0
+│   ├── summary -> "初期世界線"
+│   └── metrics -> { temporal_consistency:1.0, divergence:0.0 }
+└── WorldlineNode (worldline_id=W1, parent_id=W0)
+    ├── checkpoint_ref -> ctx#3
+    ├── highlight -> [pageindex://memory/W1/H01, ...]
+    ├── memory_links -> [pageindex://memory/W1/A01, ...]
+    └── metrics -> { temporal_consistency:0.78, divergence:0.22 }
+```
+
+### 5.9 Review Agent 承認フロー（Approval API 連携）
+- Review Agent は世界線差分・メトリクス・ハイライトを収集し、`Approval.request()` を通じてユーザーにレビュー依頼を提示する。  
+- `visualize` の世界線タブはレビュー状態（`pending`, `approved`, `rejected`）を表示し、承認結果に応じて世界線のマージ／破棄を実施。  
+- 承認判定の流れ:
+
+```
+[WorldlineManager] ──fork/reevaluate──> [ReviewAgent]
+      │                                    │
+      │  gather summaries/highlights       │
+      ▼                                    ▼
+[ReviewPackage] ──Approval.request()──> [Approval Queue]
+                                             │
+                         [Shell UI visualizeタブ] ──ユーザー選択──> (Approve / Reject / Session Approve)
+                                             │
+      ◄─────────ApprovalResponse────────────┘
+      │
+  (approve)  -> set worldline.status = approved → merge/apply checkpoint
+  (reject)   -> set worldline.status = rejected → discard or keep as alt branch
+  (session) -> auto-approve同系アクションを記録
+```
+
+- Review Agent は承認結果と議論過程を PageIndex メモリへ保存し、次回の世界線選択時に参照可能とする。  
+- バッチ承認（`APPROVE_FOR_SESSION`）時は同一 `action` を共有するレビューリクエストを自動承認、整合性を維持する。
 ## 6. メタコマンド仕様（案）
 ```
 /reading-steiner [mode] [options...]
