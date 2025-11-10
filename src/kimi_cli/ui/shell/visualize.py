@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections import deque
 from collections.abc import Callable
 from contextlib import asynccontextmanager, suppress
@@ -20,6 +21,7 @@ from kimi_cli.tools import extract_key_argument
 from kimi_cli.ui.shell.console import console
 from kimi_cli.ui.shell.keyboard import KeyEvent, listen_for_keyboard
 from kimi_cli.utils.rich.markdown import Markdown
+from kimi_cli.utils.string import shorten_middle
 from kimi_cli.wire import WireUISide
 from kimi_cli.wire.message import (
     ApprovalRequest,
@@ -90,6 +92,10 @@ class _ToolCallBlock:
         self._argument = extract_key_argument(self._lexer, self._tool_name)
         self._result: ToolReturnType | None = None
 
+        # -- Task metadata cache for later display updates
+        self._task_description: str | None = None
+        self._task_subagent_name: str | None = None
+
         self._ongoing_subagent_tool_calls: dict[str, ToolCall] = {}
         self._last_subagent_tool_call: ToolCall | None = None
         self._n_finished_subagent_tool_calls = 0
@@ -98,6 +104,7 @@ class _ToolCallBlock:
         )
 
         self._spinning_dots = Spinner("dots", text="")
+        self._refresh_task_metadata()
         self._renderable: RenderableType = self._compose()
 
     def compose(self) -> RenderableType:
@@ -119,6 +126,7 @@ class _ToolCallBlock:
                 Text.from_markup(self._get_headline_markup()),
                 bullet=self._spinning_dots,
             )
+        self._refresh_task_metadata()
 
     def finish(self, result: ToolReturnType):
         self._result = result
@@ -152,6 +160,34 @@ class _ToolCallBlock:
         )
         self._n_finished_subagent_tool_calls += 1
         self._renderable = self._compose()
+
+    def set_subagent_name(self, name: str | None) -> None:
+        """Remember the subagent name for Task headline rendering."""
+        if not name:
+            return
+        self._task_subagent_name = shorten_middle(name, width=40)
+        self._renderable = self._compose()
+
+    def _refresh_task_metadata(self) -> None:
+        """Extract Task-specific metadata when arguments become available."""
+        if self._tool_name != "Task":
+            return
+        try:
+            raw_args = self._lexer.complete_json()
+        except ValueError:
+            return
+        try:
+            parsed_args = json.loads(raw_args)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(parsed_args, dict):
+            return
+        description = parsed_args.get("description") or parsed_args.get("prompt")
+        if isinstance(description, str) and description:
+            self._task_description = shorten_middle(description, width=60)
+        subagent_name = parsed_args.get("subagent_name")
+        if isinstance(subagent_name, str) and subagent_name:
+            self._task_subagent_name = shorten_middle(subagent_name, width=40)
 
     def _compose(self) -> RenderableType:
         lines: list[RenderableType] = [
@@ -203,9 +239,28 @@ class _ToolCallBlock:
             )
 
     def _get_headline_markup(self) -> str:
-        return f"{'Used' if self.finished else 'Using'} [blue]{self._tool_name}[/blue]" + (
-            f" [grey50]({escape(self._argument)})[/grey50]" if self._argument else ""
-        )
+        status = "Used" if self.finished else "Using"
+        base = f"{status} [blue]{self._tool_name}[/blue]"
+
+        if self._tool_name != "Task":
+            if self._argument:
+                return f"{base} [grey50]({escape(self._argument)})[/grey50]"
+            return base
+
+        desc = self._task_description or self._argument
+        agent = self._task_subagent_name
+        if not desc and not agent:
+            return base
+
+        args_markup = "[grey50]([/grey50]"
+        if desc:
+            args_markup += f'[grey50]"{escape(desc)}"[/grey50]'
+        if agent:
+            if desc:
+                args_markup += "[grey50], [/grey50]"
+            args_markup += f'[orchid]"{escape(agent)}"[/orchid]'
+        args_markup += "[grey50])[/grey50]"
+        return f"{base} {args_markup}"
 
 
 class _ApprovalRequestPanel:
@@ -545,6 +600,7 @@ class _LiveView:
         block = self._tool_call_blocks.get(event.task_tool_call_id)
         if block is None:
             return
+        block.set_subagent_name(event.subagent_name)
 
         match event.event:
             case ToolCall() as tool_call:
