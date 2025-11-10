@@ -58,7 +58,8 @@
   - 状態表現に世界線履歴(グラフ)・記憶参照状態を含める。  
   - 染色体 → 「ツール呼び出しシーケンス」+「チェックポイント遷移」。  
   - Fitness 関数に Temporal Consistency / Relevance / Divergence など複数スコアを組み合わせる。  
-  - 探索結果は必ず Worldline Manager を経由して登録し、バタフライ効果検証を挟む。
+  - 探索結果は必ず Worldline Manager を経由して登録し、バタフライ効果検証を挟む。  
+  - Mind Evolution の各 LLM 呼び出しは Kimi CLI 標準の `kosong` フレームワーク（`kimi_cli.llm`）を通じて実行し、既存の思考モード・ツール呼び出しとの整合を取る。
 
 ### 5.4 チェックポイント・バタフライ効果評価
 - `Temporal Evaluator`（仮）モジュールを新設し、未来側に既存チェックポイントがある場合、差分シミュレーションを実行：  

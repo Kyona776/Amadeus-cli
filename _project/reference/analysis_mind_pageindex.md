@@ -38,6 +38,7 @@
   - 各世界線の履歴ログや要約を Markdown/JSON として蓄積 → PageIndex でメタデータ化 → 参照候補を高速抽出。
   - `md_to_tree` によるノード要約機能を、世界線ごとのトレース「ハイライト生成」に転用できる。
   - 物理ページ番号の概念は世界線チェックポイント ID へマップし直す必要あり。
+  - LLM 呼び出し部分は Kimi CLI の `kosong` API (`kimi_cli.llm`) を利用するラッパ層を用意し、外部 API 依存を排除する。
 
 ## 3. ブログ記事より（pageindex.ai）
 - `pageindex_intro.html`: PageIndex のコンセプト紹介。目次抽出→ハイライト→セクション単位検索の流れを説明。
